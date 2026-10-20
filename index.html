@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>KGEES FSR</title>
+  <meta name="theme-color" content="#dc262a">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="KGEES FSR">
+  <style>
+    html, body { margin: 0; height: 100%; background: #ffffff; font-family: system-ui, sans-serif; }
+    #app { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; display: none; }
+    .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+              justify-content: center; gap: 14px; color: #141414; text-align: center; padding: 24px; }
+    .screen img { width: 170px; height: auto; }
+    .brand { font-size: 22px; font-weight: 800; letter-spacing: .5px; }
+    .brand b { color: #dc262a; }
+    .spinner { width: 28px; height: 28px; border: 3px solid #f1d4d4; border-top-color: #dc262a;
+               border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    button { background: #dc262a; color: #fff; border: 0; border-radius: 10px; padding: 12px 22px;
+             font-size: 16px; font-weight: 700; }
+    #offline, #install { display: none; }
+    #install { position: fixed; left: 16px; right: 16px; bottom: 16px; z-index: 10;
+               background: #141414; color: #fff; border-radius: 12px; padding: 12px 14px;
+               box-shadow: 0 4px 16px rgba(0,0,0,.25); align-items: center; gap: 12px; }
+    #install span { flex: 1; font-size: 14px; }
+  </style>
+</head>
+<body>
+
+  <!-- Splash while FSR loads -->
+  <div id="splash" class="screen">
+    <img src="icons/logo.png" alt="KGEES Fine Foods">
+    <div class="brand">KGEES <b>FSR</b></div>
+    <div class="spinner"></div>
+  </div>
+
+  <!-- Shown when there is no signal -->
+  <div id="offline" class="screen">
+    <img src="icons/logo.png" alt="KGEES Fine Foods">
+    <div style="font-size:18px;font-weight:700">No signal</div>
+    <div>FSR needs internet. Move to an area with signal and tap retry.</div>
+    <button onclick="location.reload()">Retry</button>
+  </div>
+
+  <!-- The real FSR app (Apps Script) loads inside this frame -->
+  <iframe id="app" allow="camera; geolocation; microphone; clipboard-write"></iframe>
+
+  <!-- Install prompt (Android Chrome) -->
+  <div id="install">
+    <span>Install KGEES FSR on this phone?</span>
+    <button id="installBtn">Install</button>
+  </div>
+
+  <script>
+    // ===================== SETTINGS =====================
+    // 1. Paste your FSR web app URL here (Deploy → Manage deployments → Web app URL, ends in /exec)
+    const FSR_URL = 'https://script.google.com/macros/s/AKfycbzo07_xVthAwpisSmbO60JVvPFoX3z4pSqQsJxq6K_YGOl9MQrJ67tHHqHThysU1qrkEQ/exec';
+
+    // 2. 'frame'    = FSR opens inside this app (best look; needs the doGet change in the guide)
+    //    'redirect' = FSR opens directly (use this if SAs must sign in with Google
+    //                 and the frame shows a blank or "refused to connect" screen)
+    const MODE = 'frame';
+    // ====================================================
+
+    const splash = document.getElementById('splash');
+    const offline = document.getElementById('offline');
+    const app = document.getElementById('app');
+
+    function start() {
+      if (!navigator.onLine) {
+        splash.style.display = 'none';
+        offline.style.display = 'flex';
+        return;
+      }
+      if (MODE === 'redirect') {
+        location.replace(FSR_URL);
+        return;
+      }
+      app.onload = () => { splash.style.display = 'none'; app.style.display = 'block'; };
+      app.src = FSR_URL;
+    }
+
+    window.addEventListener('online', () => { if (offline.style.display === 'flex') location.reload(); });
+    window.addEventListener('offline', () => {
+      if (app.style.display === 'block') return; // keep FSR on screen; it may still recover
+      splash.style.display = 'none'; offline.style.display = 'flex';
+    });
+
+    // Register the service worker (needed for install + offline screen)
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+
+    // Custom install button
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      document.getElementById('install').style.display = 'flex';
+    });
+    document.getElementById('installBtn').onclick = async () => {
+      document.getElementById('install').style.display = 'none';
+      if (deferredPrompt) { deferredPrompt.prompt(); deferredPrompt = null; }
+    };
+
+    start();
+  </script>
+</body>
+</html>
